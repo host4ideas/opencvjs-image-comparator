@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Hello OpenCV.js</title>
+</head>
+
+<body>
+	<h2>Hello OpenCV.js</h2>
+	<h3 id="status">OpenCV.js is loading...</h3>
+	<div>
+		<div class="inputoutput">
+			<img id="imageSrc1" alt="No Image" />
+			<div class="caption">imageSrc 1<input type="file" id="fileInput1" name="file" /></div>
+		</div>
+		<div class="inputoutput">
+			<img id="imageSrc2" alt="No Image" />
+			<div class="caption">imageSrc 2<input type="file" id="fileInput2" name="file" /></div>
+		</div>
+		<div class="inputoutput">
+			<canvas id="canvasOutput1"></canvas>
+			<div class="caption1">canvasOutput 1</div>
+		</div>
+		<div class="inputoutput">
+			<canvas id="canvasOutput2"></canvas>
+			<div class="caption2">canvasOutput 2</div>
+		</div>
+		<div class="inputoutput">
+			<canvas id="canvasOutput3"></canvas>
+			<div class="caption3">canvasOutput 3</div>
+		</div>
+	</div>
+	<script type="text/javascript">
+		let imgElement1 = document.getElementById('imageSrc1');
+		let imgElement2 = document.getElementById('imageSrc2');
+
+		function orb() {
+			const img1Original = cv.imread(imgElement1);
+			cv.imshow('canvasOutput1', img1Original);
+
+			const img2Original = cv.imread(imgElement2);
+			cv.imshow('canvasOutput2', img2Original);
+
+			/*
+				Optimize images
+			*/
+			// Transform color to gray
+			let img1Gray = new cv.Mat();
+			let img2Gray = new cv.Mat();
+			cv.cvtColor(img1Original, img1Gray, cv.COLOR_RGBA2GRAY, 0);
+			cv.cvtColor(img2Original, img2Gray, cv.COLOR_RGBA2GRAY, 0);
+
+			// Transform to RGB, Opencv likes RGB
+			let img1RGB = new cv.Mat();
+			cv.cvtColor(img1Original, img1RGB, cv.COLOR_RGBA2RGB, 0);
+
+			let img2RGB = new cv.Mat();
+			cv.cvtColor(img2Original, img2RGB, cv.COLOR_RGBA2RGB, 0);
+
+			// Transform sizes
+			let img1 = new cv.Mat();
+			let img2 = new cv.Mat();
+			const dsize = new cv.Size(300, 300);
+			cv.resize(img1RGB, img1, dsize, 0, 0, cv.INTER_AREA);
+			cv.resize(img2RGB, img2, dsize, 0, 0, cv.INTER_AREA);
+
+			/* 
+				Initiate ORB detector 
+			*/
+			let orb = new cv.ORB();
+
+			// find the keypoints with ORB
+			let keyPoints1 = new cv.KeyPointVector();
+			let keyPoints2 = new cv.KeyPointVector();
+			orb.detect(img1, keyPoints1, new cv.Mat());
+			orb.detect(img2, keyPoints2, new cv.Mat());
+
+			// compute the descriptors with ORB
+			let descriptors1 = new cv.Mat();
+			let descriptors2 = new cv.Mat();
+			orb.compute(img1, keyPoints1, descriptors1);
+			orb.compute(img2, keyPoints2, descriptors2);
+
+			/*
+				 Match using the BFMatcher with crossCheck true
+			*/
+			let bf = new cv.BFMatcher(cv.NORM_HAMMING);
+			let matches = new cv.DMatchVectorVector();
+
+			// match the feature descriptors
+			bf.knnMatch(descriptors1, descriptors2, matches, 2);
+
+			/*
+				Apply ratio test by D.Lowe and filter good results
+			*/
+			let knnDistance_option = 0.70;
+			let good_matches = new cv.DMatchVector();
+			let counter = 0;
+			for (let i = 0; i < matches.size(); ++i) {
+				let match = matches.get(i);
+				let dMatch1 = match.get(0);
+				let dMatch2 = match.get(1);
+				//console.log("[", i, "] ", "dMatch1: ", dMatch1, "dMatch2: ", dMatch2);
+				if (dMatch1.distance <= dMatch2.distance * parseFloat(knnDistance_option)) {
+					console.log("***Good Match***", "dMatch1.distance: ", dMatch1.distance, "was less than or = to: ", "dMatch2.distance * parseFloat(knnDistance_option)", dMatch2.distance * parseFloat(knnDistance_option), "dMatch2.distance: ", dMatch2.distance, "knnDistance", knnDistance_option);
+					good_matches.push_back(dMatch1);
+					counter++;
+				}
+			}
+
+			console.log("keeping ", counter, " points in good_matches vector out of ", matches.size(), " contained in this match vector:", matches);
+			console.log("here are first 5 matches");
+			for (let t = 0; t < matches.size(); ++t) {
+				console.log("[" + t + "]", "matches: ", matches.get(t));
+				if (t === 5) { break; }
+			}
+
+			console.log("here are first 5 good_matches");
+			for (let r = 0; r < good_matches.size(); ++r) {
+				console.log("[" + r + "]", "good_matches: ", good_matches.get(r));
+				if (r === 5) { break; }
+			}
+
+			let matchingImage = new cv.Mat();
+
+			/**
+			 * img1	First source image.
+			 * keypoints1	Keypoints from the first source image.
+			 * img2	Second source image.
+			 * keypoints2	Keypoints from the second source image.
+			 * matches1to2	Matches from the first image to the second one, which means that keypoints1[i] has a corresponding point in keypoints2[matches[i]] .
+			 * outImg	Output image. Its content depends on the flags value defining what is drawn in the output image. See possible flags bit values below.
+			 * matchColor	Color of matches (lines and connected keypoints). If matchColor==Scalar::all(-1) , the color is generated randomly.
+			 * singlePointColor	Color of single keypoints (circles), which means that keypoints do not have the matches. If singlePointColor==Scalar::all(-1) , the color is generated randomly.
+			 */
+			cv.drawMatches(
+				img1,
+				keyPoints1,
+				img2,
+				keyPoints2,
+				good_matches,
+				matchingImage
+			);
+
+			cv.imshow('canvasOutput3', matchingImage);
+
+			[img1Original, img2Original, img1, img2, keyPoints1, keyPoints2, descriptors1, descriptors2, orb, matches, good_matches, bf, matchingImage].forEach((element) => {
+				element.delete();
+			})
+		}
+
+		/**
+		 * Checks if images are loaded and initializes the ORB image comparison
+		 * 
+		 */
+		function main() {
+			let inputElement1 = document.getElementById('fileInput1');
+			inputElement1.addEventListener('change', (e) => {
+				imgElement1.src = URL.createObjectURL(e.target.files[0]);
+			}, false);
+
+			let inputElement2 = document.getElementById('fileInput2');
+			inputElement2.addEventListener('change', (e) => {
+				imgElement2.src = URL.createObjectURL(e.target.files[0]);
+			}, false);
+
+			// When both images are loaded, compare them
+			imgElement1.onload = function () {
+				const img1 = cv.imread(imgElement1);
+				cv.resize(img1, img1, new cv.Size(300, 300), 0, 0, cv.INTER_AREA);
+				cv.cvtColor(img1, img1, cv.COLOR_RGBA2GRAY, 0);
+				cv.imshow('canvasOutput1', img1);
+				if (imgElement2.src) {
+					orb();
+				}
+			};
+			imgElement2.onload = function () {
+				const img2 = cv.imread(imgElement2);
+				cv.resize(img2, img2, new cv.Size(300, 300), 0, 0, cv.INTER_AREA);
+				cv.imshow('canvasOutput2', img2);
+				if (imgElement1.src) {
+					orb();
+				}
+			};
+		}
+	</script>
+	<script async src="opencv-4.6.js" type="text/javascript" onload="{
+			document.getElementById('status').innerHTML = 'OpenCV.js is loaded.';
+			cv['onRuntimeInitialized'] = () => {document.getElementById('status').innerHTML = 'OpenCV.js is ready.'}; 
+			main();
+		}"></script>
+</body>
+
+</html>
